@@ -1,0 +1,37 @@
+@startuml	
+
+title <b><size:20>Server启动过程分析
+
+main_mediaserver --> ProcessState : 		初始化ProcessState
+
+ProcessState --> Binder驱动程序 : 			打开binder driver设备到fd,并映射到内存中,打开binder driver,设置版本号7,和binder最大的线程数15
+
+main_mediaserver --> MediaPlayerService : 	初始化MediaPlayerService,并增加Service
+
+MediaPlayerService --> IServiceManager : 	调用addService接口
+
+IServiceManager --> BpServiceManager : 		将传入的binder对象和描述写入到Parcel数据data中,用flat_binder_object表示binder对象 
+
+note right: struct flat_binder_object \n{unsigned long type;\n unsigned long flags;\n union{\n void *binder/* local binder*/\n signed long handle /* remote object*/\n} void *cookie}
+
+BpServiceManager --> IPCThreadState : 		调用BpBinder的transact函数,实际上是调用IPCThreadState的transact接口传输数据
+
+IPCThreadState --> Binder驱动程序 : 			(BC_TRANSACTION)1.调用writeTransactionData函数,将Parcel数据data读取到binder_transaction_data tr中,并将tr写到Parcel mOut变量中,\n2.waitForResponse函数中是通过talkWithDriver和Binder驱动程序交互,将Parcel mOut变量的数据写到binder_write_read bwr变量中,mIn变量设置需要读取的数据载体,调用ioctl函数设置先写后读。
+
+note right: struct binder_transaction_data\n{ union{\n size_t handle;\nvoid *ptr}\ntarget;\nvoid *cookie;\nunsigned int code;\nunsigned int flags;\n pid_t sender_pid;\nuid_t sender_euid;\nsize_t data_size;\nsize_t offsets_size;\nunion{\nstruct {\nconst void *buffer;\nconst void *offsets;\n}ptr; \nuint8_t buf[8];}\ndata; };
+				
+Binder驱动程序 --> IPCThreadState : 			(BC_TRANSACTION_COMPLETE)调用ioctl函数中,\n1.调用binder_thread_write,这里是BC_TRANSACTION,将用户空间的binder_transaction_data tr通过mOut来拷贝到binder内核中的binder_transaction_data tr中,\n并调用binder_transaction函数,根据tr来分配待处理事务t和待完成工作项tcomplete,事务t交给binder_proc target_proc 处理即ServiceManager,并增加引用计数,并将t->buffer中的flat_binder_obj的\ntype由BINDER_TYPE_BINDER改成BINDER_TYPE_HANDLE,将t放到target_list队列中,将tcomplete放到thread->todo队列中,并调用wake_up_interruptible唤醒Service Manager进程\n2.调用binder_thread_read函数,由于thread->todo队列中的,删除todo队列中的tcomplete,并将bwr即数据消耗情况binder_transaction_data tr通过mIn拷贝回用户空间中binder_transaction_data tr,\n3.bwr的数据消耗情况同步到用户空间mOut和mIn数据中,就调用wait_event_interruptible进入睡眠状态,等待Service Manager来唤醒。
+
+Binder驱动程序 --> ServiceManager : 			(WAKE UP)Service Manager被唤醒之后,调用binder_thread_read函数,将事务项t给浅拷贝到binder_transaction_data tr中去,\n因为binder_proc proc中的不为空,所以获得第一个工作项,根据工作项获得事务项t,判断cmd == BR_TRANSACTION && !(t->flags & TF_ONE_WAY)条件为true还是false来确定是否需要回复,\n如果是并将t放到transaction_stack队列的头部,否则不放,从binder_thread_read返回后,把binder_wirte_read bwr的内容拷贝回到用户传进来的缓冲区中返回。
+
+ServiceManager --> Binder驱动程序 : 			(BC_TRANSACTION)将bwr数据转换为binder_txn,新代码的是binder_transaction_data和初始化binder_io reply,并调用svcmgr_handler函数添加server,\n将server对象和server的名字保存svclist链表中,只要client给定service的名称就可以查询对应的service,并调用binder_send_reply函数,\n发送BC_FREE_BUFFER和BC_REPLY命令,分别是释放binder_transaction分配的空间和告诉返回码,即调用ioctl进行先读后写(BC_TRANSACTION_COMPLETE)。
+
+Binder驱动程序 --> ServiceManager : 			(BC_REPLY)ioctl函数中\n1.binder_thread_write根据BC_FREE_BUFFER命令来释放分配空间把transation_stack中删除,\n2.BC_REPLY命令告诉返回码,将t和tcomplete分别放在target_list和thread->todo队列中,并调用wake_up_interruptible唤醒IPCThreadState中的等待,并将reply的transaction删除,而ServiceManager将继续循环,调用ioctl可读的会执行binder_thread_read,执行将tcomplete删除。
+
+Binder驱动程序 --> IPCThreadState :			(BC_REPLY)而在IPCThreadState被唤醒了,重新执行binder_thread_read函数,从thread->todo中将得到w,将t->buffer->data+proc->user_buffer_offset,得到用户空间地址,并通过bwr数据结构返回到IPCThreadState中,则将这个数据保存在reply中。		
+
+main_mediaserver --> ProcessState : 		在joinThreadPool中,通过talkWithDriver和Binder驱动程序进行交互,\n实际上调用talkWithDriver来等待Client的请求,并调用executeCommand来处理请求。
+
+IPThreadState --> BnMediaPlayerService : 	并调用BnMediaPlayerService的onTransact函数来处理来自客户端的请求。
+
+@enduml

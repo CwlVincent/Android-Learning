@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE en-export SYSTEM "http://xml.evernote.com/pub/evernote-export3.dtd">
+<en-export export-date="20171124T092318Z" application="Evernote" version="Evernote Mac 6.12.2 (455489)">
+<note><title>Android源码-ThreadLocal</title><content><![CDATA[<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE en-note SYSTEM "http://xml.evernote.com/pub/enml2.dtd">
+<en-note><div>ThreadLocal能够使线程中的某个值和保存值的对象关联起来。ThreadLocal提供了get与set等访问接口或方法，这些方法为每个使用该变量的线程都存有一份独立的副本，因此get总是返回由当前执行线程在调用set时设置的最新值。</div><div><br/></div><div>当使用ThreadLocal维护变量时，ThreadLocal为每个使用该变量的线程提供独立的变量副本，所以每个线程都可以独立地改变自己的副本，而不会影响其他线程所对应的副本。</div><div><br/></div><div>从线程的角度看，目标变量就像线程本地变量，这也是类</div></en-note>
+]]></content><created>20170825T015357Z</created><updated>20170831T065600Z</updated><note-attributes><latitude>22.53661435999999</latitude><longitude>114.05052154</longitude><altitude>14</altitude><author>1009439210@qq.com</author><source>desktop.mac</source><reminder-order>0</reminder-order></note-attributes></note>
+</en-export>
