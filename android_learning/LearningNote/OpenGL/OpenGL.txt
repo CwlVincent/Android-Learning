@@ -1,0 +1,4 @@
+1.GLSurfaceView的2种渲染模式可以选择的
+   通过接口GLSurface:: setRequestMode()
+    GLSurfaceView.RENDERMODE_WHEN_DIRTY:仅在你的绘制数据发送变化是才在视图中进行绘制操作。
+    GLSurfaceView.RENDERMODE_CONTINUOUSLY:只要调用了绘制的接口，就会持续的绘制画面。

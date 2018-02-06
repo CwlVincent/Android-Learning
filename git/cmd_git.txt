@@ -5,3 +5,5 @@ git blame 查看某段代码被需改的记录
 git revert 回滚代码并且用新的提交来覆盖之前的commit
 
 git checkout File --ours [ --theirs ]
+
+git clean -i -n 用来清理无法reset的代码，但是被git追踪到的代码

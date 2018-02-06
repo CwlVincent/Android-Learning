@@ -1,0 +1,102 @@
+传输数据时避免消耗大量电量
+
+1.优化下载以高效的访问网络
+
+    无线电波(wireless)是app最耗电的原因，出于完全工作状态的无线电会大量消耗电量。
+
+    无线电网络有三种能量状态
+    1、Full power:当无线连接被激活的时候，允许设备以最大的传输速率进行操作。
+    2、Low power：一种中间状态，对电量消耗差不多是Full power状态的50%。
+    3、Standby：最小的能量状态，没有被激活或者需求的网络连接。
+
+
+App访问的网络时对电量的具体数字影响
+
+1次访问网络请求：花费的电量时间6s的Full power时间，和12s的Low power时间，共18s的电量
+访问网络 --> Full power : 1s的访问时间
+Full power --> Low power : 5s的Full power时间
+Low power --> standy :12s ：12s的Low power时间
+
+量化的场景
+1.1分钟，请求网络3次，传输unbundled data的app，会耗费18s Full power的电量，42s low power的电量
+2.1分钟，请求网络3s，传输bundled data的app，会消耗8s Fullpower的电量，12s的low power的电量
+
+
+解决方案
+
+1.预读技术：在一定时间内，单次连接操作，以最大的下载能力来下载所有用户可能需要的数据。
+
+好处：节省电量，改善了延迟，减低带宽，减少下载时间
+坏处：不能频繁操作，可能会下载到并不需要的数据
+
+实践的方案：通过逐步处理数据，或者按照优先级开始持续的数据传递，所以是预取1-5Mb比较好，同理大数据下载，应该是2-5分钟开始下载另一段。
+
+大量网络传输的问题定位工具
+1.使用Android DDMS检测网络使用情况。
+2.通过TrafficStats.setThreadStatsTag()方法标记数据传输发生在某个Thread里面，然后手动使用tagSocket()进行标记或者使用untagSocket()来取消标记
+TrafficStats.setThreadStatsTag(0xF00D);
+TrafficStats.tagSocket(outputSocket);
+//Transfer data using socket
+TrafficStats.untagSocket(outputSokcet);
+
+在Appache的HttpClient与URLConnection库可以根据当前的getThreadStatusTag()值自动给socket加速标记。
+TranfficStats.setThreadStatsTag(0xF00D);
+try{
+//Make network request using HttpClient.execute();
+}finally{
+    TrafficStats.clearThreadStasTag();
+}
+
+
+
+2.合理的轮询的方式，使用指针退避算法来减少重复尝试的次数。
+
+
+3.缓存技术：用缓存静态的资源，包括下载的内容缓存下来。
+
+    为了保证app不会因为缓存而导致显示的是旧数据，请裘在缓存中获取数据同时检测其是否过期，当数据过程时，会提示进行刷新。
+long currentTime = System.currentTimeMillis();
+
+HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+
+long expirs = conn.getHeaderFieldDate("Expires",currentTime);
+long lastModified = conn.getHeaderFieldDate("Last-Modified", currentTime);
+
+setDataExpirationDate(expires);
+
+if(lastModified < lastUpateTime){
+    //Skip update
+}else {
+    //Parse update
+}
+
+缓存非敏感的数据到非受管的外部缓存目录
+Android/data/data/com.xxx.xxx/cache
+Context.getExternalCacheDir();
+
+或者使用受管/安全的应用缓存，但是可用空间小
+system/data/data/com.xxx.xxx./cache.
+Context.getCache();
+
+会在app卸载的时候被清除。
+
+HttpURLConnection响应缓存
+相关的代码
+private void enableHttpResponseCache() {
+  try {
+    long httpCacheSize = 10 * 1024 * 1024; // 10 MiB
+    File httpCacheDir = new File(getCacheDir(), "http");
+    Class.forName("android.net.http.HttpResponseCache")
+         .getMethod("install", File.class, long.class)
+         .invoke(null, httpCacheDir, httpCacheSize);
+  } catch (Exception httpResponseCacheNotAvailable) {
+    Log.d(TAG, "HTTP response cache is unavailable.");
+  }
+}
+
+
+
+4.根据具体的网络状态，来调整下载模式
+
+
+
